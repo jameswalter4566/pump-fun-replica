@@ -1,0 +1,9 @@
+# JavaScript intercepts most API calls directly
+# Proxy Next.js system files and any missed endpoints
+
+# Next.js system files
+/_next/*  https://pump.fun/_next/:splat  200
+/_vercel/*  https://pump.fun/_vercel/:splat  200
+
+# SPA routing - serve index.html for all paths
+/*  /index.html  200
