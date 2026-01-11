@@ -1,9 +1,15 @@
 # JavaScript intercepts most API calls directly
 # Proxy Next.js system files and any missed endpoints
 
+# Cloudflare endpoints
+/cdn-cgi/*  https://pump.fun/cdn-cgi/:splat  200
+
 # Next.js system files
 /_next/*  https://pump.fun/_next/:splat  200
 /_vercel/*  https://pump.fun/_vercel/:splat  200
+
+# External resources and static files
+/static/*  https://pump.fun/static/:splat  200
 
 # SPA routing - serve index.html for all paths
 /*  /index.html  200
