@@ -11,5 +11,8 @@
 # External resources and static files
 /static/*  https://pump.fun/static/:splat  200
 
+# Create coin page
+/create  /create.html  200
+
 # SPA routing - serve index.html for all paths
 /*  /index.html  200
