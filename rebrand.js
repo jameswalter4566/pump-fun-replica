@@ -22,8 +22,8 @@
         .replace(/Pump is better/g, 'pumpv3 is better')
         .replace(/Pump app/g, 'pumpv3 app')
         .replace(/Pump App/g, 'pumpv3 App')
-        .replace(/© pump/g, '© pumpv3')
-        .replace(/©pump/g, '©pumpv3');
+        .replace(/© pump(?!v3)/g, '© pumpv3')
+        .replace(/©pump(?!v3)/g, '©pumpv3');
 
       // Handle standalone "Pump" text
       if (/^Pump$/.test(text.trim())) {
