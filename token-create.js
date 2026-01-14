@@ -3,7 +3,7 @@
   console.log('pumpv3 Token Creation Script loaded');
 
   // Configuration
-  const DEPLOY_FUNCTION_URL = '/.netlify/functions/deploy-token';
+  const DEPLOY_FUNCTION_URL = 'https://bqncfjnigubyictxbliq.supabase.co/functions/v1/deploy-token';
 
   // State
   let selectedImage = null;
