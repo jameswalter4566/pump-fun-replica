@@ -10,6 +10,12 @@
   function rebrandText(node) {
     if (node.nodeType === Node.TEXT_NODE) {
       var text = node.textContent;
+
+      // Skip if already contains pumpv3 (already processed)
+      if (text.includes('pumpv3')) {
+        return;
+      }
+
       var newText = text
         .replace(/Pump\.fun/g, 'pumpv3')
         .replace(/pump\.fun/g, 'pumpv3')
