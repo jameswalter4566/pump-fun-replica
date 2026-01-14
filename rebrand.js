@@ -1,5 +1,12 @@
 // pumpv3 Rebranding Script
 (function() {
+  // Fix document title
+  function fixTitle() {
+    if (document.title.includes('Pump') && !document.title.includes('pumpv3')) {
+      document.title = document.title.replace(/Pump/g, 'pumpv3');
+    }
+  }
+
   function rebrandText(node) {
     if (node.nodeType === Node.TEXT_NODE) {
       var text = node.textContent;
@@ -8,7 +15,14 @@
         .replace(/pump\.fun/g, 'pumpv3')
         .replace(/Pump is better/g, 'pumpv3 is better')
         .replace(/Pump app/g, 'pumpv3 app')
-        .replace(/© pump/g, '© pumpv3');
+        .replace(/Pump App/g, 'pumpv3 App')
+        .replace(/© pump/g, '© pumpv3')
+        .replace(/©pump/g, '©pumpv3');
+
+      // Handle standalone "Pump" text
+      if (/^Pump$/.test(text.trim())) {
+        newText = text.replace('Pump', 'pumpv3');
+      }
 
       if (text !== newText) {
         node.textContent = newText;
@@ -27,6 +41,7 @@
   }
 
   function rebrandAll() {
+    fixTitle();
     document.querySelectorAll('*').forEach(rebrandElement);
   }
 
