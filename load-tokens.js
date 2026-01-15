@@ -25,8 +25,7 @@
       const tokens = await response.json();
       console.log('[pumpv3] Loaded tokens:', tokens.length);
 
-      // Only update if token count changed or first load
-      if (tokens.length !== lastTokenCount || !document.getElementById('pumpv3-tokens-container')) {
+      if (tokens.length !== lastTokenCount || !document.getElementById('pumpv3-grid')) {
         lastTokenCount = tokens.length;
         displayTokens(tokens);
       }
@@ -35,159 +34,118 @@
     }
   }
 
-  function displayTokens(tokens) {
-    // Remove "Nothing to see here" messages
-    hideEmptyMessages();
+  function findAndReplaceEmptyState() {
+    // Find the "Nothing to see here" container and replace it
+    const allElements = document.querySelectorAll('*');
 
-    // Find or create container
-    let container = document.getElementById('pumpv3-tokens-container');
-
-    if (!container) {
-      container = document.createElement('div');
-      container.id = 'pumpv3-tokens-container';
-      container.style.cssText = `
-        width: 100%;
-        max-width: 1400px;
-        margin: 0 auto;
-        padding: 20px;
-      `;
-
-      // Find where to insert - look for main content area
-      const mainContent = document.querySelector('main') ||
-                          document.querySelector('[class*="container"]') ||
-                          document.querySelector('[class*="content"]') ||
-                          document.body;
-
-      // Insert at beginning of main content
-      if (mainContent.firstChild) {
-        mainContent.insertBefore(container, mainContent.firstChild);
-      } else {
-        mainContent.appendChild(container);
+    for (const el of allElements) {
+      if (el.textContent && el.textContent.includes('Nothing to see here') &&
+          el.textContent.includes("didn't find any coins")) {
+        // Found the empty state container - find its parent grid container
+        let container = el;
+        while (container && container.parentElement) {
+          // Look for a container that looks like a main content area
+          if (container.classList &&
+              (container.classList.toString().includes('grid') ||
+               container.classList.toString().includes('flex') ||
+               container.classList.toString().includes('container'))) {
+            return container;
+          }
+          container = container.parentElement;
+        }
+        // Return the closest reasonable parent
+        return el.closest('div') || el.parentElement;
       }
     }
-
-    // Build the tokens HTML
-    container.innerHTML = `
-      <div style="margin-bottom: 30px;">
-        <h2 style="color: #00ff88; font-size: 28px; margin: 0 0 10px 0; display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 32px;">🚀</span> pumpv3 Tokens
-          <span style="font-size: 14px; color: #666; font-weight: normal;">(${tokens.length} tokens)</span>
-        </h2>
-        <p style="color: #888; margin: 0;">Tokens launched on pumpv3 - click to trade on pump.fun</p>
-      </div>
-      <div id="pumpv3-grid" style="
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        gap: 20px;
-      "></div>
-    `;
-
-    const grid = document.getElementById('pumpv3-grid');
-
-    if (tokens.length === 0) {
-      grid.innerHTML = `
-        <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: #666;">
-          <p style="font-size: 18px; margin: 0;">No tokens launched yet</p>
-          <p style="margin: 10px 0 0 0;">Be the first to <a href="/create" style="color: #00ff88;">create a token</a>!</p>
-        </div>
-      `;
-      return;
-    }
-
-    tokens.forEach(token => {
-      const card = createTokenCard(token);
-      grid.appendChild(card);
-    });
+    return null;
   }
 
-  function hideEmptyMessages() {
-    // Hide "Nothing to see here" and similar empty state messages
-    const selectors = [
-      '[class*="empty"]',
-      '[class*="no-results"]',
-      '[class*="nothing"]'
-    ];
+  function displayTokens(tokens) {
+    // Find the empty state section to replace
+    const emptyState = findAndReplaceEmptyState();
 
-    // Also search by text content
-    document.querySelectorAll('div, p, span, h1, h2, h3').forEach(el => {
-      const text = el.textContent.toLowerCase();
-      if (text.includes('nothing to see here') ||
-          text.includes("didn't find any coins") ||
-          text.includes('no coins found') ||
-          text.includes('try a different search')) {
-        // Hide the parent container
-        let parent = el.closest('div[class]') || el.parentElement;
-        if (parent) {
-          parent.style.display = 'none';
-        }
-      }
-    });
+    if (emptyState) {
+      console.log('[pumpv3] Found empty state, replacing...');
+
+      // Create grid for tokens
+      const grid = document.createElement('div');
+      grid.id = 'pumpv3-grid';
+      grid.style.cssText = `
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 16px;
+        padding: 20px;
+        width: 100%;
+      `;
+
+      tokens.forEach(token => {
+        const card = createTokenCard(token);
+        grid.appendChild(card);
+      });
+
+      // Replace empty state with our grid
+      emptyState.innerHTML = '';
+      emptyState.appendChild(grid);
+    } else {
+      console.log('[pumpv3] Empty state not found, will retry...');
+    }
   }
 
   function createTokenCard(token) {
     const card = document.createElement('a');
     card.href = token.yes_pump_url || `https://pump.fun/coin/${token.yes_mint_address}`;
     card.target = '_blank';
-    card.className = 'pumpv3-token-card';
     card.style.cssText = `
-      display: block;
-      background: linear-gradient(145deg, #1a1a2e 0%, #0f0f1a 100%);
-      border: 1px solid rgba(0, 255, 136, 0.3);
-      border-radius: 16px;
-      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      background: rgba(26, 26, 46, 0.8);
+      border: 1px solid rgba(0, 255, 136, 0.2);
+      border-radius: 12px;
+      padding: 16px;
       text-decoration: none;
-      transition: all 0.3s ease;
+      transition: all 0.2s ease;
       cursor: pointer;
-      overflow: hidden;
     `;
 
     card.onmouseenter = () => {
-      card.style.transform = 'translateY(-5px) scale(1.02)';
-      card.style.boxShadow = '0 15px 40px rgba(0, 255, 136, 0.25)';
+      card.style.transform = 'translateY(-4px)';
       card.style.borderColor = '#00ff88';
+      card.style.boxShadow = '0 8px 25px rgba(0, 255, 136, 0.2)';
     };
     card.onmouseleave = () => {
-      card.style.transform = 'translateY(0) scale(1)';
+      card.style.transform = 'translateY(0)';
+      card.style.borderColor = 'rgba(0, 255, 136, 0.2)';
       card.style.boxShadow = 'none';
-      card.style.borderColor = 'rgba(0, 255, 136, 0.3)';
     };
 
-    const name = token.token_name || 'Unknown Token';
+    const name = token.token_name || 'Unknown';
     const symbol = token.yes_outcome || '???';
-    const description = token.description || 'No description';
-    const createdAt = token.created_at ? formatTimeAgo(new Date(token.created_at)) : '';
+    const description = token.description || '';
+    const imageUrl = token.image_url || '';
     const mintAddress = token.yes_mint_address || '';
     const shortMint = mintAddress ? `${mintAddress.slice(0, 4)}...${mintAddress.slice(-4)}` : '';
+    const createdAt = token.created_at ? formatTimeAgo(new Date(token.created_at)) : '';
+
+    // Use image if available, otherwise show letter
+    const imageHtml = imageUrl
+      ? `<img src="${imageUrl}" alt="${name}" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+         <div style="display: none; width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, #00ff88, #00aa55); align-items: center; justify-content: center; font-size: 20px; font-weight: bold; color: #000;">${symbol.charAt(0).toUpperCase()}</div>`
+      : `<div style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, #00ff88, #00aa55); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; color: #000;">${symbol.charAt(0).toUpperCase()}</div>`;
 
     card.innerHTML = `
-      <div style="display: flex; align-items: flex-start; gap: 15px;">
-        <div style="
-          width: 70px;
-          height: 70px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #00ff88 0%, #00aa55 100%);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 28px;
-          font-weight: bold;
-          color: #000;
-          flex-shrink: 0;
-        ">${symbol.charAt(0).toUpperCase()}</div>
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        ${imageHtml}
         <div style="flex: 1; min-width: 0;">
-          <h3 style="color: #fff; margin: 0 0 5px 0; font-size: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${name}</h3>
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-            <span style="color: #00ff88; font-size: 15px; font-weight: bold;">$${symbol}</span>
-            <span style="color: #555; font-size: 12px;">${shortMint}</span>
-          </div>
-          <p style="color: #888; font-size: 13px; margin: 0; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-            ${description}
-          </p>
+          <div style="color: #fff; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${name}</div>
+          <div style="color: #00ff88; font-size: 12px; font-weight: bold;">$${symbol}</div>
         </div>
       </div>
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
-        <span style="color: #555; font-size: 12px;">${createdAt}</span>
-        <span style="color: #00ff88; font-size: 13px; font-weight: 500;">Trade on pump.fun →</span>
+      <div style="color: #888; font-size: 11px; margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4;">
+        ${description || 'No description'}
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+        <span style="color: #555; font-size: 10px;">${createdAt}</span>
+        <span style="color: #00ff88; font-size: 11px;">Trade →</span>
       </div>
     `;
 
@@ -206,21 +164,15 @@
   function init() {
     console.log('[pumpv3] Initializing token display...');
 
-    // Load immediately
-    loadTokens();
+    // Try loading after a delay to let page render
+    setTimeout(loadTokens, 1000);
+    setTimeout(loadTokens, 2000);
+    setTimeout(loadTokens, 3000);
 
-    // Then refresh every 5 seconds for real-time updates
+    // Then refresh every 5 seconds
     setInterval(loadTokens, 5000);
-
-    // Also refresh when page becomes visible
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) {
-        loadTokens();
-      }
-    });
   }
 
-  // Start when DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
