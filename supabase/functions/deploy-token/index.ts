@@ -1,257 +1,229 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Keypair, Connection, VersionedTransaction } from "https://esm.sh/@solana/web3.js@1.87.6";
-import bs58 from "https://esm.sh/bs58@5.0.0";
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
+import { Keypair, Connection, VersionedTransaction } from 'https://esm.sh/@solana/web3.js@1.95.8'
+import bs58 from 'https://esm.sh/bs58@6.0.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+}
+
+const PUMP_PORTAL_URL = 'https://pumpportal.fun/api/trade-local'
+const PUMP_IPFS_URL = 'https://pump.fun/api/ipfs'
+const WEBSITE_URL = 'https://pumpvthree.fun/'
+const TWITTER_URL = 'https://x.com/pumpvtwo'
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+const DEVELOPER_KEY = Deno.env.get('DEVELOPER_KEY') || ''
+const SOLANA_RPC_URL = Deno.env.get('SOLANA_RPC_URL') || 'https://api.mainnet-beta.solana.com'
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
+async function uploadMetadata(params: {
+  name: string
+  symbol: string
+  description: string
+  imageBase64?: string
+}): Promise<string> {
+  console.log('[deploy-token] uploading metadata for', params.name)
+
+  const formData = new FormData()
+  formData.append('name', params.name)
+  formData.append('symbol', params.symbol)
+  formData.append('description', params.description)
+  formData.append('twitter', TWITTER_URL)
+  formData.append('telegram', '')
+  formData.append('website', WEBSITE_URL)
+  formData.append('showName', 'true')
+
+  if (params.imageBase64) {
+    // Strip data URL prefix if present
+    let base64Data = params.imageBase64
+    if (base64Data.includes(',')) {
+      base64Data = base64Data.split(',')[1]
+    }
+
+    const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0))
+    const blob = new Blob([imageBuffer], { type: 'image/png' })
+    formData.append('file', blob, 'image.png')
+  }
+
+  const response = await fetch(PUMP_IPFS_URL, {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Failed to upload metadata: ${response.status} ${text}`)
+  }
+
+  const result = await response.json()
+  console.log('[deploy-token] metadata uploaded:', result.metadataUri)
+  return result.metadataUri
+}
+
+async function createToken(params: {
+  name: string
+  symbol: string
+  metadataUri: string
+  developerKeypair: Keypair
+  connection: Connection
+}): Promise<{ mintAddress: string; signature: string; pumpUrl: string }> {
+  console.log('[deploy-token] creating token:', params.name)
+
+  const mintKeypair = Keypair.generate()
+
+  const pumpPayload = {
+    publicKey: params.developerKeypair.publicKey.toBase58(),
+    action: 'create',
+    tokenMetadata: {
+      name: params.name,
+      symbol: params.symbol,
+      uri: params.metadataUri,
+    },
+    mint: mintKeypair.publicKey.toBase58(),
+    denominatedInSol: 'true',
+    amount: 0.0001,
+    slippage: 10,
+    priorityFee: 0.0005,
+    pool: 'pump',
+  }
+
+  console.log('[deploy-token] sending to PumpPortal')
+
+  const response = await fetch(PUMP_PORTAL_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(pumpPayload),
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`PumpPortal API error: ${response.status} ${text}`)
+  }
+
+  const txBuffer = await response.arrayBuffer()
+  const tx = VersionedTransaction.deserialize(new Uint8Array(txBuffer))
+
+  tx.sign([mintKeypair, params.developerKeypair])
+
+  const signature = await params.connection.sendTransaction(tx, {
+    skipPreflight: false,
+    maxRetries: 3,
+  })
+
+  console.log('[deploy-token] transaction sent:', signature)
+
+  const confirmation = await params.connection.confirmTransaction(signature, 'confirmed')
+  if (confirmation.value.err) {
+    throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`)
+  }
+
+  const mintAddress = mintKeypair.publicKey.toBase58()
+  const pumpUrl = `https://pump.fun/coin/${mintAddress}`
+
+  console.log('[deploy-token] token created:', { mintAddress, signature, pumpUrl })
+
+  return { mintAddress, signature, pumpUrl }
+}
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders })
+  }
+
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    return jsonResponse({ error: 'Missing Supabase credentials' }, 500)
+  }
+
+  if (!DEVELOPER_KEY) {
+    return jsonResponse({ error: 'Missing developer key' }, 500)
   }
 
   try {
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const DEVELOPER_KEY = Deno.env.get('DEVELOPER_KEY')!;
+    const body = await req.json()
 
-    // RPC endpoint - using public Solana RPC
-    const RPC_ENDPOINT = "https://api.mainnet-beta.solana.com";
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-    // Parse request body
-    const { name, symbol, description, imageBase64, createdBy } = await req.json();
-
-    if (!name || !symbol || !description || !imageBase64) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: name, symbol, description, imageBase64' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!body.name || !body.symbol) {
+      return jsonResponse({ error: 'Name and symbol are required' }, 400)
     }
 
-    console.log(`Creating token: ${name} (${symbol})`);
+    console.log('[deploy-token] received request:', { name: body.name, symbol: body.symbol })
 
-    // Step 1: Upload image to pump.fun IPFS
-    const imageBlob = base64ToBlob(imageBase64);
-    const formData = new FormData();
-    formData.append('file', imageBlob, `${symbol}.png`);
-    formData.append('name', name);
-    formData.append('symbol', symbol);
-    formData.append('description', description);
-    formData.append('twitter', 'https://x.com/pumpvtwo');
-    formData.append('website', 'https://pumpvthree.fun/');
-    formData.append('showName', 'true');
+    const connection = new Connection(SOLANA_RPC_URL, 'confirmed')
+    const developerKeypair = Keypair.fromSecretKey(bs58.decode(DEVELOPER_KEY))
 
-    console.log('Uploading metadata to IPFS...');
-    const ipfsResponse = await fetch('https://pump.fun/api/ipfs', {
-      method: 'POST',
-      body: formData,
-    });
+    console.log('[deploy-token] developer wallet:', developerKeypair.publicKey.toBase58())
 
-    if (!ipfsResponse.ok) {
-      const errorText = await ipfsResponse.text();
-      console.error('IPFS upload failed:', errorText);
-      return new Response(
-        JSON.stringify({ error: 'Failed to upload to IPFS', details: errorText }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const description = body.description || `Token created on pumpv3: ${body.name}`
 
-    const ipfsData = await ipfsResponse.json();
-    console.log('IPFS response:', ipfsData);
-    const metadataUri = ipfsData.metadataUri;
+    const metadataUri = await uploadMetadata({
+      name: body.name,
+      symbol: body.symbol,
+      description: description,
+      imageBase64: body.imageBase64 || undefined,
+    })
 
-    // Step 2: Generate mint keypair
-    const mintKeypair = Keypair.generate();
-    const mintPublicKey = mintKeypair.publicKey.toBase58();
+    const result = await createToken({
+      name: body.name,
+      symbol: body.symbol,
+      metadataUri: metadataUri,
+      developerKeypair,
+      connection,
+    })
 
-    // Step 3: Get developer wallet from secret
-    let developerKeypair: Keypair;
-    try {
-      // Try parsing as base58 private key
-      const secretKey = bs58.decode(DEVELOPER_KEY);
-      developerKeypair = Keypair.fromSecretKey(secretKey);
-    } catch (e) {
-      // Try parsing as JSON array
-      try {
-        const secretKeyArray = JSON.parse(DEVELOPER_KEY);
-        developerKeypair = Keypair.fromSecretKey(new Uint8Array(secretKeyArray));
-      } catch (e2) {
-        return new Response(
-          JSON.stringify({ error: 'Invalid DEVELOPER_KEY format' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    }
+    // Save to database
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    const developerPublicKey = developerKeypair.publicKey.toBase58();
-    console.log('Developer wallet:', developerPublicKey);
-
-    // Step 4: Create token using pump portal local API
-    console.log('Creating token transaction...');
-    const createResponse = await fetch('https://pumpportal.fun/api/trade-local', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        publicKey: developerPublicKey,
-        action: 'create',
-        tokenMetadata: {
-          name: name,
-          symbol: symbol,
-          uri: metadataUri
-        },
-        mint: mintPublicKey,
-        denominatedInSol: 'true',
-        amount: 0.0001, // Small initial dev buy
-        slippage: 10,
-        priorityFee: 0.0005,
-        pool: 'pump'
-      })
-    });
-
-    if (!createResponse.ok) {
-      const errorText = await createResponse.text();
-      console.error('Token creation failed:', errorText);
-      return new Response(
-        JSON.stringify({ error: 'Failed to create token transaction', details: errorText }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Step 5: Sign and send transaction
-    const txData = await createResponse.arrayBuffer();
-    const tx = VersionedTransaction.deserialize(new Uint8Array(txData));
-
-    // Sign with both developer keypair and mint keypair
-    tx.sign([developerKeypair, mintKeypair]);
-
-    const connection = new Connection(RPC_ENDPOINT, 'confirmed');
-
-    console.log('Sending transaction...');
-    const signature = await connection.sendTransaction(tx, {
-      skipPreflight: false,
-      preflightCommitment: 'confirmed',
-      maxRetries: 3
-    });
-
-    console.log('Transaction signature:', signature);
-
-    // Step 6: Upload image to Supabase storage as backup
-    const storagePath = `tokens/${mintPublicKey}.png`;
-    const { error: uploadError } = await supabase.storage
-      .from('prediction-images')
-      .upload(storagePath, imageBlob, {
-        contentType: 'image/png',
-        upsert: true
-      });
-
-    if (uploadError) {
-      console.error('Storage upload error:', uploadError);
-    }
-
-    const { data: publicUrlData } = supabase.storage
-      .from('prediction-images')
-      .getPublicUrl(storagePath);
-
-    const supabaseImageUrl = publicUrlData?.publicUrl || ipfsData.metadata?.image;
-
-    // Step 7: Save to database
-    const pumpUrl = `https://pump.fun/coin/${mintPublicKey}`;
-
-    const { data: insertData, error: insertError } = await supabase
+    const { data: insertedData, error: insertError } = await supabase
       .from('token_launches')
       .insert({
-        token_name: name,
+        token_name: body.name,
         description: description,
-        image_url: supabaseImageUrl,
-        created_by: createdBy || 'pumpv3',
-        yes_outcome: symbol,
+        image_url: null,
+        created_by: body.createdBy || 'pumpv3',
+        yes_outcome: body.symbol,
         no_outcome: 'N/A',
-        yes_mint_address: mintPublicKey,
+        yes_mint_address: result.mintAddress,
         no_mint_address: null,
-        yes_tx_signature: signature,
+        yes_tx_signature: result.signature,
         no_tx_signature: null,
-        yes_pump_url: pumpUrl,
+        yes_pump_url: result.pumpUrl,
         no_pump_url: null,
-        category: 'meme'
+        category: 'meme',
       })
       .select()
-      .single();
+      .single()
 
     if (insertError) {
-      console.error('Database insert error:', insertError);
-      return new Response(
-        JSON.stringify({
-          error: 'Token created but failed to save to database',
-          signature,
-          mintAddress: mintPublicKey,
-          pumpUrl,
-          details: insertError.message
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      console.error('[deploy-token] database insert failed:', insertError)
     }
 
-    // Success response
-    return new Response(
-      JSON.stringify({
-        success: true,
-        token: {
-          id: insertData.id,
-          name: name,
-          symbol: symbol,
-          description: description,
-          mintAddress: mintPublicKey,
-          signature: signature,
-          pumpUrl: pumpUrl,
-          imageUrl: supabaseImageUrl
-        }
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    console.log('[deploy-token] completed successfully')
 
+    return jsonResponse({
+      success: true,
+      token: {
+        id: insertedData?.id,
+        name: body.name,
+        symbol: body.symbol,
+        description: description,
+        mintAddress: result.mintAddress,
+        signature: result.signature,
+        pumpUrl: result.pumpUrl,
+      },
+    })
   } catch (error) {
-    console.error('Error:', error);
-    return new Response(
-      JSON.stringify({ error: 'Internal server error', details: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    console.error('[deploy-token] failed:', error)
+    return jsonResponse(
+      { error: error instanceof Error ? error.message : 'Launch failed' },
+      500
+    )
   }
-});
-
-// Helper function to convert base64 to Blob
-function base64ToBlob(base64: string): Blob {
-  try {
-    // Remove data URL prefix if present (handles various image types)
-    let base64Data = base64;
-    if (base64.includes(',')) {
-      base64Data = base64.split(',')[1];
-    }
-
-    // Clean the base64 string
-    base64Data = base64Data.trim().replace(/\s/g, '');
-
-    // Decode base64
-    const binaryString = atob(base64Data);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-
-    // Detect image type from the original data URL
-    let mimeType = 'image/png';
-    if (base64.includes('data:image/jpeg')) mimeType = 'image/jpeg';
-    else if (base64.includes('data:image/gif')) mimeType = 'image/gif';
-    else if (base64.includes('data:image/webp')) mimeType = 'image/webp';
-
-    return new Blob([bytes], { type: mimeType });
-  } catch (e) {
-    console.error('base64ToBlob error:', e);
-    throw new Error('Failed to decode base64');
-  }
-}
+})
