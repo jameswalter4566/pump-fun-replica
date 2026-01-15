@@ -5,7 +5,6 @@
 
   function init() {
     addLaunchButton();
-    addFollowButton();
   }
 
   function getFormData() {
@@ -95,18 +94,6 @@
     btn.textContent = 'Launch Token';
     btn.style.cssText = 'position:fixed;bottom:80px;right:20px;padding:15px 30px;background:#00ff88;color:#000;font-weight:bold;font-size:16px;border:none;border-radius:10px;cursor:pointer;z-index:9999;';
     btn.onclick = launchToken;
-    document.body.appendChild(btn);
-  }
-
-  function addFollowButton() {
-    if (document.getElementById('pumpv3-follow')) return;
-
-    const btn = document.createElement('a');
-    btn.id = 'pumpv3-follow';
-    btn.href = 'https://x.com/pumpvtwo';
-    btn.target = '_blank';
-    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg> Follow Us';
-    btn.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:12px 20px;background:#000;color:#fff;text-decoration:none;border-radius:25px;font-weight:bold;display:flex;align-items:center;gap:8px;z-index:9999;border:1px solid #333;';
     document.body.appendChild(btn);
   }
 

@@ -226,12 +226,32 @@ serve(async (req) => {
 
 // Helper function to convert base64 to Blob
 function base64ToBlob(base64: string): Blob {
-  // Remove data URL prefix if present
-  const base64Data = base64.replace(/^data:image\/\w+;base64,/, '');
-  const binaryString = atob(base64Data);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+  try {
+    // Remove data URL prefix if present (handles various image types)
+    let base64Data = base64;
+    if (base64.includes(',')) {
+      base64Data = base64.split(',')[1];
+    }
+
+    // Clean the base64 string
+    base64Data = base64Data.trim().replace(/\s/g, '');
+
+    // Decode base64
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    // Detect image type from the original data URL
+    let mimeType = 'image/png';
+    if (base64.includes('data:image/jpeg')) mimeType = 'image/jpeg';
+    else if (base64.includes('data:image/gif')) mimeType = 'image/gif';
+    else if (base64.includes('data:image/webp')) mimeType = 'image/webp';
+
+    return new Blob([bytes], { type: mimeType });
+  } catch (e) {
+    console.error('base64ToBlob error:', e);
+    throw new Error('Failed to decode base64');
   }
-  return new Blob([bytes], { type: 'image/png' });
 }
