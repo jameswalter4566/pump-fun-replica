@@ -1,7 +1,7 @@
 // pumpv3 Token Display Script - Real-time loading
 (function() {
   const SUPABASE_URL = 'https://bqncfjnigubyictxbliq.supabase.co';
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxbmNmam5pZ3VieWljdHhibGlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYyOTY4NjIsImV4cCI6MjA1MTg3Mjg2Mn0.gTHWjjmEPVxGXbHpnPbhpHy6pc2tUxNqDdKS9XqPbjY';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxbmNmam5pZ3VieWljdHhibGlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYxNjE4NzUsImV4cCI6MjA2MTczNzg3NX0.BF3cKuOnaGJI-SlPKW52lnw6SxiwQtK0eU-ofGGcKrs';
 
   let lastTokenCount = 0;
 
