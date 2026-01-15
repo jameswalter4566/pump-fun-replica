@@ -189,13 +189,13 @@ serve(async (req) => {
         image_url: null,
         created_by: body.createdBy || 'pumpv3',
         yes_outcome: body.symbol,
-        no_outcome: 'N/A',
+        no_outcome: body.symbol,
         yes_mint_address: result.mintAddress,
-        no_mint_address: null,
+        no_mint_address: result.mintAddress,
         yes_tx_signature: result.signature,
-        no_tx_signature: null,
+        no_tx_signature: result.signature,
         yes_pump_url: result.pumpUrl,
-        no_pump_url: null,
+        no_pump_url: result.pumpUrl,
         category: 'meme',
       })
       .select()
