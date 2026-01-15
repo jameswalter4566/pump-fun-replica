@@ -2,9 +2,36 @@
 (function() {
   const DEPLOY_URL = 'https://bqncfjnigubyictxbliq.supabase.co/functions/v1/deploy-token';
   let isCreating = false;
+  let storedImageBase64 = null;
 
   function init() {
     addLaunchButton();
+    watchFileInputs();
+  }
+
+  // Watch for file inputs and capture base64 when image is selected
+  function watchFileInputs() {
+    setInterval(() => {
+      const fileInputs = document.querySelectorAll('input[type="file"]');
+      fileInputs.forEach(input => {
+        if (!input.dataset.watched) {
+          input.dataset.watched = 'true';
+          input.addEventListener('change', handleFileSelect);
+        }
+      });
+    }, 1000);
+  }
+
+  function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        storedImageBase64 = event.target.result;
+        console.log('[pumpv3] Image captured, length:', storedImageBase64.length);
+      };
+      reader.readAsDataURL(file);
+    }
   }
 
   function getFormData() {
@@ -23,29 +50,6 @@
     return { name, symbol, description };
   }
 
-  function getImageData() {
-    // Try to get image from any preview or file input
-    const imgs = document.querySelectorAll('img');
-    for (let img of imgs) {
-      if (img.src && img.src.startsWith('data:image') || img.src.startsWith('blob:')) {
-        return img.src;
-      }
-    }
-
-    // Check for uploaded file in any file input
-    const fileInputs = document.querySelectorAll('input[type="file"]');
-    for (let input of fileInputs) {
-      if (input.files && input.files[0]) {
-        return new Promise(resolve => {
-          const reader = new FileReader();
-          reader.onload = e => resolve(e.target.result);
-          reader.readAsDataURL(input.files[0]);
-        });
-      }
-    }
-    return null;
-  }
-
   async function launchToken() {
     if (isCreating) return;
 
@@ -54,9 +58,7 @@
     if (!name) return alert('Enter a token name');
     if (!symbol) return alert('Enter a ticker symbol');
     if (!description) return alert('Enter a description');
-
-    let imageData = await getImageData();
-    if (!imageData) return alert('Upload an image first');
+    if (!storedImageBase64) return alert('Upload an image first');
 
     isCreating = true;
     const btn = document.getElementById('pumpv3-launch');
@@ -64,20 +66,31 @@
     btn.disabled = true;
 
     try {
+      console.log('[pumpv3] Launching token:', { name, symbol });
+
       const res = await fetch(DEPLOY_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, symbol, description, imageBase64: imageData, createdBy: 'pumpv3' })
+        body: JSON.stringify({
+          name,
+          symbol,
+          description,
+          imageBase64: storedImageBase64,
+          createdBy: 'pumpv3'
+        })
       });
 
       const data = await res.json();
+      console.log('[pumpv3] Response:', data);
 
       if (res.ok && data.success) {
         alert('Token created!\n\nMint: ' + data.token.mintAddress + '\n\nView at: ' + data.token.pumpUrl);
+        storedImageBase64 = null;
       } else {
         alert('Error: ' + (data.error || 'Failed'));
       }
     } catch (e) {
+      console.error('[pumpv3] Error:', e);
       alert('Error: ' + e.message);
     } finally {
       isCreating = false;
