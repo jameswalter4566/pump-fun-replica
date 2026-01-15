@@ -7,6 +7,41 @@
     }
   }
 
+  // Remove unwanted elements
+  function removeUnwantedElements() {
+    // Remove pump logomark
+    document.querySelectorAll('img[alt="Pump"][src*="pump-logomark"]').forEach(function(el) {
+      el.remove();
+    });
+
+    // Remove QR code app download element
+    document.querySelectorAll('img[alt="Pump App QR Code"]').forEach(function(el) {
+      var parent = el.closest('.relative.flex.flex-col');
+      if (parent) parent.remove();
+    });
+
+    // Also find by "Scan to download" text
+    document.querySelectorAll('p').forEach(function(p) {
+      if (p.textContent.includes('Scan to download')) {
+        var parent = p.closest('.relative.flex.flex-col');
+        if (parent) parent.remove();
+      }
+    });
+
+    // Hide any "Log in" buttons in upload areas
+    document.querySelectorAll('button').forEach(function(btn) {
+      var text = btn.textContent.trim().toLowerCase();
+      if (text === 'log in' || text === 'login') {
+        var uploadArea = btn.closest('[class*="border-dashed"]');
+        if (uploadArea) {
+          // Replace login button with just "Select file"
+          btn.textContent = 'Select file';
+          btn.style.pointerEvents = 'none';
+        }
+      }
+    });
+  }
+
   function rebrandText(node) {
     if (node.nodeType === Node.TEXT_NODE) {
       var text = node.textContent;
@@ -48,6 +83,7 @@
 
   function rebrandAll() {
     fixTitle();
+    removeUnwantedElements();
     document.querySelectorAll('*').forEach(rebrandElement);
   }
 
