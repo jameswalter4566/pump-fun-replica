@@ -4,6 +4,7 @@
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxbmNmam5pZ3VieWljdHhibGlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYxNjE4NzUsImV4cCI6MjA2MTczNzg3NX0.BF3cKuOnaGJI-SlPKW52lnw6SxiwQtK0eU-ofGGcKrs';
 
   let lastTokenCount = 0;
+  let gridInserted = false;
 
   async function loadTokens() {
     try {
@@ -25,7 +26,7 @@
       const tokens = await response.json();
       console.log('[pumpv3] Loaded tokens:', tokens.length);
 
-      if (tokens.length !== lastTokenCount || !document.getElementById('pumpv3-grid')) {
+      if (tokens.length !== lastTokenCount || !gridInserted) {
         lastTokenCount = tokens.length;
         displayTokens(tokens);
       }
@@ -34,38 +35,54 @@
     }
   }
 
-  function findAndReplaceEmptyState() {
-    // Find the "Nothing to see here" container and replace it
-    const allElements = document.querySelectorAll('*');
+  function findTargetContainer() {
+    // Find the container with "Nothing to see here" - it's the div with class containing
+    // "flex flex-col overflow-hidden px-[var(--padding-x-main)]"
+    const containers = document.querySelectorAll('div.flex.flex-col.overflow-hidden');
 
-    for (const el of allElements) {
-      if (el.textContent && el.textContent.includes('Nothing to see here') &&
-          el.textContent.includes("didn't find any coins")) {
-        // Found the empty state container - find its parent grid container
-        let container = el;
-        while (container && container.parentElement) {
-          // Look for a container that looks like a main content area
-          if (container.classList &&
-              (container.classList.toString().includes('grid') ||
-               container.classList.toString().includes('flex') ||
-               container.classList.toString().includes('container'))) {
-            return container;
-          }
-          container = container.parentElement;
+    for (const container of containers) {
+      if (container.className.includes('px-[var(--padding-x-main)]') ||
+          container.classList.contains('px-[var(--padding-x-main)]')) {
+        // Check if this contains the "Nothing to see here" text
+        if (container.textContent.includes('Nothing to see here')) {
+          console.log('[pumpv3] Found target container by class');
+          return container;
         }
-        // Return the closest reasonable parent
-        return el.closest('div') || el.parentElement;
       }
     }
+
+    // Fallback: Find the H2 with "Nothing to see here" and go up to find the container
+    const h2Elements = document.querySelectorAll('h2');
+    for (const h2 of h2Elements) {
+      if (h2.textContent.trim() === 'Nothing to see here') {
+        // Go up to find the flex-col container
+        let parent = h2.parentElement;
+        while (parent) {
+          if (parent.classList.contains('flex') &&
+              parent.classList.contains('flex-col') &&
+              parent.classList.contains('overflow-hidden')) {
+            console.log('[pumpv3] Found target container via H2 parent');
+            return parent;
+          }
+          parent = parent.parentElement;
+        }
+        // If not found, return the closest reasonable container
+        const container = h2.closest('div.flex.flex-col');
+        if (container) {
+          console.log('[pumpv3] Found target container via closest');
+          return container;
+        }
+      }
+    }
+
     return null;
   }
 
   function displayTokens(tokens) {
-    // Find the empty state section to replace
-    const emptyState = findAndReplaceEmptyState();
+    const container = findTargetContainer();
 
-    if (emptyState) {
-      console.log('[pumpv3] Found empty state, replacing...');
+    if (container) {
+      console.log('[pumpv3] Replacing container with token grid');
 
       // Create grid for tokens
       const grid = document.createElement('div');
@@ -83,11 +100,12 @@
         grid.appendChild(card);
       });
 
-      // Replace empty state with our grid
-      emptyState.innerHTML = '';
-      emptyState.appendChild(grid);
+      // Replace container content with our grid
+      container.innerHTML = '';
+      container.appendChild(grid);
+      gridInserted = true;
     } else {
-      console.log('[pumpv3] Empty state not found, will retry...');
+      console.log('[pumpv3] Target container not found, will retry...');
     }
   }
 
@@ -123,7 +141,6 @@
     const description = token.description || '';
     const imageUrl = token.image_url || '';
     const mintAddress = token.yes_mint_address || '';
-    const shortMint = mintAddress ? `${mintAddress.slice(0, 4)}...${mintAddress.slice(-4)}` : '';
     const createdAt = token.created_at ? formatTimeAgo(new Date(token.created_at)) : '';
 
     // Use image if available, otherwise show letter
@@ -164,7 +181,7 @@
   function init() {
     console.log('[pumpv3] Initializing token display...');
 
-    // Try loading after a delay to let page render
+    // Try loading after delays to let page render
     setTimeout(loadTokens, 1000);
     setTimeout(loadTokens, 2000);
     setTimeout(loadTokens, 3000);
